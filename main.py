@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-segment-length", type=int, default=2)
     parser.add_argument("--max-points-per-stroke", type=int, default=1000)
     parser.add_argument("--min-stroke-length", type=float, default=6.0)
+    parser.add_argument("--no-coverage-fill", action="store_true", help="Disable high-fidelity dark-region coverage fills.")
     parser.add_argument("--countdown", type=int, default=3)
     parser.add_argument("--scale-percent", type=float, default=100.0)
     parser.add_argument("--offset-x", type=float, default=0.0)
@@ -106,6 +107,7 @@ def run_cli(args: argparse.Namespace) -> None:
         min_point_spacing=args.spacing,
         max_points_per_stroke=args.max_points_per_stroke,
         minimum_stroke_length=args.min_stroke_length,
+        enable_coverage_fills=not args.no_coverage_fill,
     )
     mapping_config = MappingConfig(
         top_left_x=args.top_left_x,

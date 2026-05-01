@@ -64,16 +64,16 @@ def vectorize_mask(
         component_mask = labels == component_label
         path_mask = skeletonize(component_mask) if np.any(component_mask) else component_mask
         component_points = {tuple(point) for point in np.argwhere(path_mask)}
-        if len(component_points) < min_segment_length:
-            continue
+        if len(component_points) >= min_segment_length:
+            raw_strokes = _extract_component_strokes(component_points)
+            for raw_stroke in raw_strokes:
+                features = _measure_stroke(raw_stroke, distance_map)
+                role = _classify_stroke(features, config, min_segment_length)
+                if role == "noise":
+                    continue
+                candidates.extend(_build_candidates(raw_stroke, features, role, config, min_segment_length, original_mask))
 
-        raw_strokes = _extract_component_strokes(component_points)
-        for raw_stroke in raw_strokes:
-            features = _measure_stroke(raw_stroke, distance_map)
-            role = _classify_stroke(features, config, min_segment_length)
-            if role == "noise":
-                continue
-            candidates.extend(_build_candidates(raw_stroke, features, role, config, min_segment_length, original_mask))
+        candidates.extend(_generate_coverage_fill_candidates(component_mask, distance_map, config, grayscale))
 
     if config.enable_solid_region_fills:
         candidates.extend(
@@ -418,6 +418,72 @@ def _generate_solid_fill_candidates(
     return candidates
 
 
+def _generate_coverage_fill_candidates(
+    component_mask: np.ndarray,
+    distance_map: np.ndarray,
+    config: VectorizeConfig,
+    grayscale: np.ndarray | None = None,
+) -> list[StrokeCandidate]:
+    if not config.enable_coverage_fills:
+        return []
+
+    fill_mask = component_mask
+    if grayscale is not None:
+        fill_mask = component_mask & (grayscale <= config.coverage_fill_dark_pixel_value)
+
+    component_area = int(np.count_nonzero(fill_mask))
+    if component_area < config.coverage_fill_min_area:
+        return []
+
+    local_distance_values = distance_map[fill_mask]
+    if local_distance_values.size == 0:
+        return []
+
+    max_width = float(np.max(local_distance_values)) * 2.0
+    if max_width < config.coverage_fill_min_width:
+        return []
+
+    ys, xs = np.where(fill_mask)
+    min_y, max_y = int(ys.min()), int(ys.max())
+    min_x, max_x = int(xs.min()), int(xs.max())
+    local_mask = fill_mask[min_y : max_y + 1, min_x : max_x + 1]
+    if min(local_mask.shape) <= 1:
+        return []
+    if _mask_bbox_density(local_mask) < config.coverage_fill_min_bbox_density:
+        return []
+
+    fill_strokes = _scanline_fill_strokes(
+        fill_mask=local_mask,
+        origin_x=min_x,
+        origin_y=min_y,
+        spacing=max(1.0, config.coverage_fill_spacing),
+        min_interval_length=max(1.0, config.coverage_fill_min_interval_length),
+    )
+    candidates: list[StrokeCandidate] = []
+    for fill_stroke in fill_strokes:
+        processed_strokes = _finalize_stroke(fill_stroke, config, 2, "coverage_fill")
+        for processed_stroke in processed_strokes:
+            length = stroke_length(processed_stroke)
+            features = StrokeFeatures(
+                length=length,
+                point_count=len(processed_stroke),
+                mean_width=max(1.0, float(np.mean(local_distance_values)) * 2.0),
+                max_width=max_width,
+                straightness=_compute_straightness(processed_stroke, length),
+                curvature=_compute_curvature(processed_stroke),
+            )
+            candidates.append(
+                StrokeCandidate(
+                    stroke=processed_stroke,
+                    role="coverage_fill",
+                    priority=_role_priority("coverage_fill"),
+                    features=features,
+                )
+            )
+
+    return candidates
+
+
 def _finalize_stroke(
     stroke: Stroke,
     config: VectorizeConfig,
@@ -446,6 +512,9 @@ def _finalize_stroke(
     elif role == "contour":
         spacing = max(0.8, min(spacing, 1.4))
         simplify_tolerance *= 0.6
+    elif role == "coverage_fill":
+        spacing = max(0.5, min(spacing, max(0.65, config.coverage_fill_spacing * 0.75)))
+        simplify_tolerance *= 0.1
     elif role == "solid_fill":
         spacing = max(0.8, min(spacing, max(1.2, config.solid_fill_spacing * 1.1)))
         simplify_tolerance *= 0.25
@@ -894,7 +963,7 @@ def _order_candidates(candidates: list[StrokeCandidate]) -> list[StrokeCandidate
 
 
 def _role_priority(role: str) -> int:
-    if role == "solid_fill":
+    if role in {"coverage_fill", "solid_fill"}:
         return 0
     if role == "contour":
         return 1

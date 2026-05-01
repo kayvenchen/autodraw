@@ -35,7 +35,7 @@ from screen_selector import ScreenRegionSelector, ScreenSelection
 LOGGER = logging.getLogger(__name__)
 STATE_FILE = Path.home() / ".autodraw_gui_state.json"
 PREVIEW_CACHE_DIR = Path.home() / ".autodraw_preview_cache"
-STATE_VERSION = 2
+STATE_VERSION = 3
 
 GUI_DEFAULTS = {
     "threshold": "180",
@@ -79,6 +79,7 @@ class AutoDrawGui:
         self.threshold = tk.StringVar(value=GUI_DEFAULTS["threshold"])
         self.invert = tk.BooleanVar(value=False)
         self.skeletonize = tk.BooleanVar(value=True)
+        self.high_fidelity_fill = tk.BooleanVar(value=True)
         self.simplify = tk.StringVar(value=GUI_DEFAULTS["simplify"])
         self.spacing = tk.StringVar(value=GUI_DEFAULTS["spacing"])
         self.minimum_stroke_length = tk.StringVar(value=GUI_DEFAULTS["minimum_stroke_length"])
@@ -243,8 +244,10 @@ class AutoDrawGui:
         invert_check.grid(row=1, column=0, sticky="w", pady=(8, 0))
         skeleton_check = ttk.Checkbutton(controls, text="Skeletonize", variable=self.skeletonize)
         skeleton_check.grid(row=1, column=1, sticky="w", pady=(8, 0))
+        fidelity_check = ttk.Checkbutton(controls, text="High Fidelity Fill", variable=self.high_fidelity_fill)
+        fidelity_check.grid(row=1, column=5, sticky="w", pady=(8, 0))
         ttk.Label(controls, textvariable=self.area_var).grid(row=2, column=0, columnspan=6, sticky="w", pady=(8, 0))
-        self._control_widgets.extend([invert_check, skeleton_check])
+        self._control_widgets.extend([invert_check, skeleton_check, fidelity_check])
 
         content = ttk.Frame(container)
         content.grid(row=2, column=0, sticky="nsew")
@@ -548,6 +551,7 @@ class AutoDrawGui:
                 minimum=0.0,
                 maximum=100.0,
             ),
+            enable_coverage_fills=bool(self.high_fidelity_fill.get()),
         )
 
     def _build_mapping_config(self) -> MappingConfig:
@@ -813,6 +817,7 @@ class AutoDrawGui:
             self.threshold,
             self.invert,
             self.skeletonize,
+            self.high_fidelity_fill,
             self.simplify,
             self.spacing,
             self.minimum_stroke_length,
@@ -848,6 +853,7 @@ class AutoDrawGui:
             "threshold": self.threshold.get(),
             "invert": bool(self.invert.get()),
             "skeletonize": bool(self.skeletonize.get()),
+            "high_fidelity_fill": bool(self.high_fidelity_fill.get()),
             "simplify": self.simplify.get(),
             "spacing": self.spacing.get(),
             "minimum_stroke_length": self.minimum_stroke_length.get(),
@@ -883,6 +889,7 @@ class AutoDrawGui:
         self.threshold.set(str(data.get("threshold", GUI_DEFAULTS["threshold"])))
         self.invert.set(bool(data.get("invert", False)))
         self.skeletonize.set(bool(data.get("skeletonize", True)))
+        self.high_fidelity_fill.set(bool(data.get("high_fidelity_fill", True)))
         self.simplify.set(str(data.get("simplify", GUI_DEFAULTS["simplify"])))
         self.spacing.set(str(data.get("spacing", GUI_DEFAULTS["spacing"])))
         self.minimum_stroke_length.set(str(data.get("minimum_stroke_length", GUI_DEFAULTS["minimum_stroke_length"])))
@@ -944,13 +951,14 @@ class AutoDrawGui:
             "threshold": self.threshold.get(),
             "invert": bool(self.invert.get()),
             "skeletonize": bool(self.skeletonize.get()),
+            "high_fidelity_fill": bool(self.high_fidelity_fill.get()),
             "simplify": self.simplify.get(),
             "spacing": self.spacing.get(),
             "minimum_stroke_length": self.minimum_stroke_length.get(),
             "image_shape": list(pipeline.bundle.image_shape),
             "stroke_count": len(pipeline.bundle.strokes),
             "size": list(panel_size),
-            "cache_version": 4,
+            "cache_version": 5,
         }
         cache_key = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
         cache_path = PREVIEW_CACHE_DIR / f"{cache_key}.png"

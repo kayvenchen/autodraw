@@ -8,6 +8,7 @@ External desktop drawing tool that converts black-and-white line art into mouse-
 - Threshold, invert, blur, resize, and skeletonize images
 - Convert connected black pixels into ordered strokes
 - Simplify and resample paths
+- High-fidelity dark-region fill for closer reproduction of thick ink areas
 - Select the draw region with a snipping-style drag box
 - Lock the selected draw region to the current image aspect ratio
 - Preview raw image, vectorized paths, and mapped output
@@ -95,6 +96,7 @@ Useful options:
 - `--delay 0.15`
 - `--countdown 3`
 - `--skeletonize`
+- `--no-coverage-fill`
 - `--min-component-size 16`
 - `--max-points-per-stroke 800`
 - `--export-json out/paths.json`
