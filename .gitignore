@@ -1,0 +1,7 @@
+.DS_Store
+.Rhistory
+.venv/
+__pycache__/
+*.pyc
+out/
+preview.png
